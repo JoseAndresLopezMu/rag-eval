@@ -10,7 +10,7 @@ Instrucciones para el agente que trabaja en este repositorio.
 
 ```
 src/rag_eval/
-  models.py        # Formatos Pydantic: DatasetItem, Evidence, RunItem, Context, Report
+  models.py        # Formatos Pydantic: Record, DatasetItem, Evidence, RunItem, Context, Report
   relevance.py     # Regla de cobertura cita/contexto (SPEC 4.3)
   metrics/
     retrieval.py   # hit@k, recall@k, precision@k, mrr
@@ -23,7 +23,7 @@ src/rag_eval/
     cache.py       # Caché en disco por hash(modelo, versión de prompt, entradas)
     prompts.py     # Prompts versionados (PROMPT_VERSION)
   adapters/
-    jsonl.py       # Lee ejecuciones guardadas
+    jsonl.py       # Lee dataset y ejecuciones desde JSONL, con errores por línea
     chatbot_rag.py # Llama a la API de chatbot-rag
   report.py        # Construye el informe JSON y el Markdown de comparación
   cli.py           # Typer: collect, evaluate, compare, calibrate
@@ -42,11 +42,11 @@ uv sync                       # instalar dependencias
 uv run pytest                 # tests
 uv run ruff check .           # lint
 uv run ruff format .          # formato
-uv run mypy src               # tipos
+uv run mypy src tests         # tipos (modo estricto)
 uv run rag-eval --help        # CLI
 ```
 
-Antes de dar un paso por terminado deben pasar los cuatro: pytest, ruff check, ruff format --check y mypy.
+Antes de dar un paso por terminado deben pasar los cuatro: pytest, ruff check, ruff format --check y mypy. Son los mismos que ejecuta CI (`.github/workflows/ci.yml`) en cada push a `main` y en cada pull request.
 
 ## Convenciones
 
