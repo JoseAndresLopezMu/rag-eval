@@ -11,14 +11,17 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class Record(_Model):
+    id: NonEmptyStr
+
+
 class Evidence(_Model):
     source: NonEmptyStr
     page: Annotated[int, Field(ge=1)] | None = None
     quote: NonEmptyStr
 
 
-class DatasetItem(_Model):
-    id: NonEmptyStr
+class DatasetItem(Record):
     question: NonEmptyStr
     reference_answer: NonEmptyStr
     answerable: bool = True
@@ -40,8 +43,7 @@ class Context(_Model):
     text: str
 
 
-class RunItem(_Model):
-    id: NonEmptyStr
+class RunItem(Record):
     answer: str
     contexts: tuple[Context, ...] = ()
     latency_ms: Annotated[float, Field(ge=0)] | None = None
