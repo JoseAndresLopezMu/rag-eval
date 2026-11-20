@@ -34,14 +34,19 @@ Una pregunta por línea:
 ```json
 {
   "id": "q001",
-  "question": "¿Qué certificaciones de seguridad exige el pliego?",
-  "reference_answer": "ISO 27001 y el Esquema Nacional de Seguridad en categoría media.",
+  "question": "¿Qué trabajos incluye el mantenimiento de la nube privada de disco?",
+  "reference_answer": "Mantenimiento de la nube, gestión de cuentas y permisos de usuario, integración CIFS, recuperación de datos y soporte in situ.",
   "answerable": true,
   "evidence": [
     {
       "source": "pliego_tecnico_madrimasd_S_2026_003.pdf",
       "page": 7,
-      "quote": "El adjudicatario deberá acreditar la certificación ISO/IEC 27001"
+      "quote": "Creación y mantenimiento de cuentas de usuario para la nube"
+    },
+    {
+      "source": "pliego_tecnico_madrimasd_S_2026_003.pdf",
+      "page": 7,
+      "quote": "Servicio de recuperación de datos"
     }
   ]
 }
@@ -71,12 +76,25 @@ Separar "obtener respuestas" de "evaluarlas" permite evaluar sin volver a llamar
 
 Cada sistema trocea los documentos a su manera, así que no se pueden usar identificadores de fragmento. Regla propuesta:
 
-> Un contexto recuperado cubre una evidencia si tienen el mismo `source` y al menos el 60 % de los tokens normalizados de `quote` aparecen en `text`.
+> Un contexto recuperado cubre una evidencia si tienen el mismo `source` y `text` contiene, como un tramo de tokens seguidos, al menos el 60 % de los tokens normalizados de `quote`.
 
-Normalizar significa pasar a minúsculas, quitar acentos y signos de puntuación y colapsar espacios. El umbral del 60 % tolera que un trozo corte la cita por la mitad sin dar por buenos fragmentos que solo comparten palabras sueltas. Es configurable, se guarda en el informe y se valida con casos reales en los tests: cita completa, cita cortada por la mitad y fragmento vecino que no contiene la cita.
+Normalizar significa pasar a minúsculas, quitar acentos y signos de puntuación y separar por espacios. El umbral del 60 % tolera que el troceado corte la cita por la mitad: el fragmento contendrá el principio o el final de la cita como un tramo seguido. Es configurable, se guarda en el informe y se prueba con fragmentos reales del pliego.
+
+**Por qué tramo seguido (revisión del paso 3).** La primera versión de esta regla contaba tokens sueltos, en cualquier orden. Al probarla con el texto real del pliego, troceado en 50 fragmentos de 800 caracteres, daba por relevantes muchos fragmentos que no contienen la cita, porque comparten palabras frecuentes ("de", "la", "servicio", "datos"):
+
+| Cita | Falsos positivos con tokens sueltos | Con tramo seguido |
+|---|---|---|
+| será preciso, por parte del adjudicatario, implementar las siguientes tareas | 3 | 0 |
+| Gestión de certificados y protocolos seguros | 3 | 1 |
+| Mantenimiento de la nube privada de disco | 11 | 1 |
+| Servicio de recuperación de datos | 33 | 0 |
+| La administración de sistemas de servidores disponibles en la Fundación Madri+d | 22 | 0 |
+
+Con tokens sueltos, la métrica de recuperación saldría inflada y un mal sistema parecería bueno. Los pocos falsos positivos que quedan con el tramo seguido aparecen en citas cortas (6–7 palabras), así que **conviene que las citas tengan al menos 8 palabras**.
 
 Alternativas descartadas:
 - Coincidencia por página: es demasiado gruesa, porque una página contiene muchos fragmentos que no responden a la pregunta.
+- Cita exacta completa: no da falsos positivos, pero da por fallado un fragmento que tiene la cita cortada por el borde del troceado.
 - Similitud por embeddings: añade un modelo y una fuente de error más a la propia medida.
 
 ## 5. Métricas
@@ -89,7 +107,7 @@ Por pregunta, con `k` configurable (5 por defecto):
 |---|---|
 | `hit@k` | 1 si alguno de los k primeros contextos cubre alguna evidencia |
 | `recall@k` | fracción de evidencias cubiertas por los k primeros contextos |
-| `precision@k` | fracción de los k primeros contextos que cubren alguna evidencia |
+| `precision@k` | fracción de los contextos devueltos (como mucho k) que cubren alguna evidencia. Se divide por los devueltos, no por k, para no penalizar a un sistema que devuelve menos contextos. |
 | `mrr` | 1 / posición del primer contexto relevante (0 si no hay ninguno) |
 
 ### 5.2 Generación (con juez LLM)
@@ -186,6 +204,6 @@ Cada paso termina con tests en verde, se revisa antes de subirse y se anota en `
 
 ## 12. Decisiones tomadas en la revisión
 
-1. **Umbral de cobertura: 60 %**, configurable y registrado en el informe (sección 4.3).
+1. **Umbral de cobertura: 60 %**, configurable y registrado en el informe (sección 4.3). En el paso 3 se cambió de tokens sueltos a tramo seguido, tras medir los falsos positivos con el pliego real.
 2. **Adaptador: opción B** (sección 7), para que `faithfulness` se mida contra los contextos que vio el LLM y no contra una aproximación.
 3. **`correctness` binaria.** Una escala de tres niveles parece más fina, pero el nivel "parcial" es donde más discrepan entre sí los anotadores humanos y los jueces LLM. Con unas 20 etiquetas de calibración, una decisión binaria da un acuerdo juez-humano más estable y más fácil de interpretar. Si el análisis de errores muestra muchas respuestas a medias, se revisará.
