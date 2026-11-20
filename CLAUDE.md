@@ -61,6 +61,7 @@ Antes de dar un paso por terminado deben pasar los cuatro: pytest, ruff check, r
 - Los tests no hacen llamadas de red. El juez se sustituye por `FakeJudge` y las APIs por `httpx.MockTransport`.
 - Cada métrica tiene tests con casos calculados a mano, incluidos los bordes: sin contextos, sin evidencias, k mayor que el número de contextos o empates.
 - Si corriges un bug, añade primero un test que lo reproduzca.
+- Un texto presentado como extracto de un documento real (en tests, ejemplos o la SPEC) se copia literalmente del documento. Nunca se completa ni se parafrasea de memoria.
 
 ## Commits
 
