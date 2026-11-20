@@ -42,6 +42,7 @@ Lo más relevante fue el cambio de criterio en el adaptador. En el borrador, el 
 - Antes de implementar la regla, la probó con el texto real del pliego troceado en 50 fragmentos. La regla de la SPEC (60 % de los tokens, en cualquier orden) daba hasta 33 falsos positivos por cita. Exigir un tramo seguido los bajaba a 0–1. Según `CLAUDE.md`, un cambio de la SPEC requiere decisión del autor, así que paró y preguntó.
 - Al revisar el pliego vio que el ejemplo de la SPEC (una cita sobre ISO 27001) no existía en el documento: lo había inventado como ilustración en el paso 1. Lo sustituyó por citas reales.
 - Un test falló porque el agente contó a mano 18 tokens donde había 19. Lo comprobó con el propio normalizador antes de corregir el test, no el código.
+- Después de subir el paso, el agente detectó que el texto de la portada usado en un test, presentado como "extracto real del pliego", tenía la segunda mitad completada de memoria. Lo sustituyó por el texto literal. El resultado del test no cambiaba, pero el comentario afirmaba algo falso. Es el mismo error que el ejemplo de ISO 27001: rellenar con algo verosímil en vez de comprobarlo. Para evitarlo, se añadió una regla a `CLAUDE.md`.
 
 **Revisión:** el agente me presentó tres opciones (tokens sueltos, tramo seguido, cita exacta) con la tabla de falsos positivos y un ejemplo real: la portada del pliego, que con tokens sueltos cubría el 80 % de la cita "Servicio de recuperación de datos" sin contenerla.
 
