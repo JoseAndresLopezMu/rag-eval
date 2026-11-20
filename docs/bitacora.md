@@ -34,3 +34,17 @@ Lo más relevante fue el cambio de criterio en el adaptador. En el borrador, el 
 **Revisión:** revisé los cambios y no pedí modificaciones.
 
 **Decisión:** acepté `page` opcional y el rechazo de campos desconocidos. La subida queda condicionada a que CI pase en GitHub.
+
+## Paso 3 - Regla de relevancia y métricas de recuperación (2026-11-20)
+
+**Agente:**
+- Implementó `hit@k`, `recall@k`, `precision@k` y `mrr`. La regla de relevancia se inyecta como función, así que las métricas se prueban sin depender de ella.
+- Antes de implementar la regla, la probó con el texto real del pliego troceado en 50 fragmentos. La regla de la SPEC (60 % de los tokens, en cualquier orden) daba hasta 33 falsos positivos por cita. Exigir un tramo seguido los bajaba a 0–1. Según `CLAUDE.md`, un cambio de la SPEC requiere decisión del autor, así que paró y preguntó.
+- Al revisar el pliego vio que el ejemplo de la SPEC (una cita sobre ISO 27001) no existía en el documento: lo había inventado como ilustración en el paso 1. Lo sustituyó por citas reales.
+- Un test falló porque el agente contó a mano 18 tokens donde había 19. Lo comprobó con el propio normalizador antes de corregir el test, no el código.
+
+**Revisión:** el agente me presentó tres opciones (tokens sueltos, tramo seguido, cita exacta) con la tabla de falsos positivos y un ejemplo real: la portada del pliego, que con tokens sueltos cubría el 80 % de la cita "Servicio de recuperación de datos" sin contenerla.
+
+**Decisión:** elegí el tramo seguido con umbral del 60 %. La cita exacta se descartó porque fallaría con citas cortadas por el borde de un fragmento. Queda como norma escribir citas de al menos 8 palabras. `precision@k` se divide por los contextos devueltos, no por k.
+
+**Aprendizaje:** una regla que parecía razonable en papel era claramente mala con datos reales. Probar la especificación contra el documento real antes de escribir el código evitó una métrica inflada.
