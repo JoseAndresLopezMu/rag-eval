@@ -18,8 +18,10 @@ CHUNK_WITH_QUOTE = (
 COVER_PAGE_CHUNK = (
     "PLIEGO DE PRESCRIPCIONES TÉCNICAS QUE HAN DE REGIR EL CONCURSO POR EL "
     "PROCEDIMIENTO ABIERTO SIMPLIFICADO CON PLURALIDAD DE CRITERIOS PARA LA "
-    "CONTRATACIÓN DE LOS SERVICIOS DE MANTENIMIENTO, SOPORTE Y RECUPERACIÓN DE "
-    "SISTEMAS Y DATOS"
+    "CONTRATACIÓN DE LOS SERVICIOS DE MANTENIMIENTO DEL CENTRO DE PROCESO DE DATOS, "
+    "MICROINFORMATICO, RED DE AREA LOCAL, RED WIFI, CORTAFUEGOS Y SERVIDORES "
+    "VIRTUALIZADOS, INFRAESTRUCTURA VOZ SOBRE IP (VOIP) PARA COMUNICACIÓN DE VOZ Y "
+    "MATENIMIENTO Y RENOVACIÓN DEL SERVICIO DE NUBE PRIVADA DE DISCO (PRIVATE CLOUD)"
 )
 
 LONG_QUOTE = (
@@ -51,7 +53,8 @@ class TestQuoteCoverage:
         assert quote_coverage(QUOTE, CHUNK_WITH_QUOTE) == 1.0
 
     def test_shared_words_without_the_phrase_score_low(self) -> None:
-        assert quote_coverage(QUOTE, COVER_PAGE_CHUNK) < 0.6
+        # Only "servicio de" appears as a run: 2 of 5 tokens.
+        assert quote_coverage(QUOTE, COVER_PAGE_CHUNK) == pytest.approx(2 / 5)
 
     def test_quote_cut_by_chunk_boundary(self) -> None:
         assert quote_coverage(LONG_QUOTE, CHUNK_CUT_MID_QUOTE) == pytest.approx(12 / 19)
