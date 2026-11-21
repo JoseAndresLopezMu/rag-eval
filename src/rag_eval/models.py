@@ -54,3 +54,33 @@ class RunItem(Record):
         if ranks != list(range(1, len(ranks) + 1)):
             raise ValueError(f"context ranks must be 1..n in order, got {ranks}")
         return self
+
+
+class MetricEstimate(_Model):
+    mean: float
+    ci_low: float
+    ci_high: float
+    n: Annotated[int, Field(ge=1)]
+
+
+class QuestionResult(Record):
+    answerable: bool
+    scores: dict[str, float]
+
+
+class EvalConfig(_Model):
+    k: Annotated[int, Field(ge=1)] = 5
+    threshold: Annotated[float, Field(gt=0, le=1)] = 0.6
+    confidence: Annotated[float, Field(gt=0, lt=1)] = 0.95
+    resamples: Annotated[int, Field(ge=100)] = 2000
+    seed: int = 0
+
+
+class Report(_Model):
+    rag_eval_version: str
+    git_commit: str | None
+    dataset_sha256: str
+    run_sha256: str
+    config: EvalConfig
+    aggregates: dict[str, MetricEstimate]
+    questions: tuple[QuestionResult, ...]
