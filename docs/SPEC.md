@@ -141,7 +141,8 @@ Con unas 30 preguntas, muchas diferencias pequeñas no serán concluyentes. Pref
 - Caché en disco con clave `hash(modelo, versión del prompt, entradas)`, para no pagar dos veces por lo mismo y poder reproducir un informe.
 - Modo JSON de la API. Si la respuesta no cumple el esquema, el modelo tiene un único reintento con el error de validación delante. Los errores 429 y 5xx se reintentan con espera exponencial, respetando `retry-after`.
 - El juez es opcional (`rag-eval evaluate --judge`), para que las métricas de recuperación funcionen sin clave de API. El modelo es configurable (`--judge-model`), y dos informes con jueces distintos no se pueden comparar.
-- **Riesgo de autopreferencia:** si el juez es el mismo modelo que generó las respuestas (chatbot-rag usa `llama-3.3-70b-versatile`), puede favorecerlas. La calibración del paso 7 permite medirlo.
+- **Riesgo de autopreferencia:** si el juez es el mismo modelo que generó las respuestas, puede favorecerlas. La calibración del paso 7 permite medirlo.
+- **Modelo por defecto: `openai/gpt-oss-120b`.** Al probar con la API real (2026-11-22) se vio que Groq ya no ofrece `llama-3.3-70b-versatile`, el modelo previsto y el que usa chatbot-rag por defecto. Cuando chatbot-rag cambie de modelo en el paso 6, conviene que el generador no sea `gpt-oss-120b`, para mantener el juez y el generador separados.
 
 ### 6.1 Calibración del juez
 
