@@ -44,7 +44,11 @@ uv run ruff check .           # lint
 uv run ruff format .          # formato
 uv run mypy src tests         # tipos (modo estricto)
 uv run rag-eval --help        # CLI
+uv run rag-eval evaluate --dataset d.jsonl --run r.jsonl --out report.json [--judge]
+uv run rag-eval compare a.json b.json
 ```
+
+`--judge` llama a Groq (necesita `GROQ_API_KEY`) y guarda las respuestas en `.rag_eval_cache/`. Los tests nunca lo usan.
 
 Antes de dar un paso por terminado deben pasar los cuatro: pytest, ruff check, ruff format --check y mypy. Son los mismos que ejecuta CI (`.github/workflows/ci.yml`) en cada push a `main` y en cada pull request.
 
