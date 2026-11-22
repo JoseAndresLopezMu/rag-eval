@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from rag_eval.judge.base import JudgeError, Judgement, Prompt
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
 
 _RETRY_STATUS = {429, 500, 502, 503, 504}
 
