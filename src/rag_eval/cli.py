@@ -1,4 +1,5 @@
 import hashlib
+import os
 import subprocess
 from pathlib import Path
 from typing import Annotated, NoReturn
@@ -7,6 +8,9 @@ import typer
 
 from rag_eval import __version__
 from rag_eval.adapters.jsonl import DataFileError, read_dataset, read_run
+from rag_eval.judge.base import JudgeError
+from rag_eval.judge.cache import CachedJudge
+from rag_eval.judge.groq import DEFAULT_MODEL, GroqJudge
 from rag_eval.models import EvalConfig, Report
 from rag_eval.report import ReportError, build_report, compare_reports, render_comparison
 
@@ -40,8 +44,22 @@ def evaluate(
     threshold: Annotated[
         float, typer.Option(min=0.01, max=1.0, help="Minimum quote coverage.")
     ] = 0.6,
+    judge: Annotated[
+        bool, typer.Option("--judge", help="Also score answers with an LLM judge (Groq).")
+    ] = False,
+    judge_model: Annotated[str, typer.Option(help="Groq model used as judge.")] = DEFAULT_MODEL,
+    cache_dir: Annotated[
+        Path, typer.Option(help="Judgement cache; delete it to re-ask the judge.")
+    ] = Path(".rag_eval_cache"),
 ) -> None:
     """Score a run against the dataset and write a JSON report."""
+    cached: CachedJudge | None = None
+    if judge:
+        api_key = os.environ.get("GROQ_API_KEY", "")
+        if not api_key:
+            _fail("--judge needs the GROQ_API_KEY environment variable")
+        cached = CachedJudge(GroqJudge(api_key, model=judge_model), cache_dir)
+
     try:
         report = build_report(
             read_dataset(dataset),
@@ -50,8 +68,9 @@ def evaluate(
             dataset_sha256=_sha256(dataset),
             run_sha256=_sha256(run),
             git_commit=_git_commit(),
+            judge=cached,
         )
-    except (DataFileError, ReportError) as e:
+    except (DataFileError, ReportError, JudgeError) as e:
         _fail(str(e))
 
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -59,6 +78,8 @@ def evaluate(
 
     for name, est in report.aggregates.items():
         typer.echo(f"{name:<14} {est.mean:.3f}  [{est.ci_low:.3f}, {est.ci_high:.3f}]  n={est.n}")
+    if cached is not None:
+        typer.echo(f"Judge {cached.model}: {cached.misses} calls, {cached.hits} from cache")
     typer.echo(f"Report written to {out}")
 
 

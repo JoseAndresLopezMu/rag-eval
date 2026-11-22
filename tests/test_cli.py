@@ -1,10 +1,12 @@
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from rag_eval import __version__
 from rag_eval.cli import app
+from rag_eval.judge.fake import FakeJudge
 from rag_eval.models import Report
 
 runner = CliRunner()
@@ -120,3 +122,52 @@ def test_compare_rejects_reports_from_different_datasets(tmp_path: Path) -> None
     result = runner.invoke(app, ["compare", str(a), str(b)])
     assert result.exit_code == 1
     assert "different datasets" in result.output
+
+
+def judge_args(tmp_path: Path) -> list[str]:
+    dataset = write_jsonl(tmp_path / "dataset.jsonl", DATASET)
+    run = write_jsonl(tmp_path / "run.jsonl", run_with("servicio de recuperacion de datos"))
+    return [
+        "evaluate",
+        "--dataset",
+        str(dataset),
+        "--run",
+        str(run),
+        "--out",
+        str(tmp_path / "r.json"),
+        "--judge",
+        "--cache-dir",
+        str(tmp_path / "cache"),
+    ]
+
+
+def test_judge_requires_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    result = runner.invoke(app, judge_args(tmp_path))
+    assert result.exit_code == 1
+    assert "GROQ_API_KEY" in result.output
+
+
+def test_judge_scores_are_added_and_cached(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeJudge(
+        {
+            "faithfulness": lambda p: {"claims": [{"claim": "c", "supported": True}]},
+            "correctness": lambda p: {"correct": True, "rationale": "r"},
+            "abstention": lambda p: {"abstained": True, "rationale": "r"},
+        },
+        model="fake-model",
+    )
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setattr("rag_eval.cli.GroqJudge", lambda key, model: fake)
+
+    first = runner.invoke(app, judge_args(tmp_path))
+    assert first.exit_code == 0, first.output
+    assert "Judge fake-model: 4 calls, 0 from cache" in first.output
+
+    second = runner.invoke(app, judge_args(tmp_path))
+    assert "Judge fake-model: 0 calls, 4 from cache" in second.output
+
+    report = Report.model_validate_json((tmp_path / "r.json").read_text(encoding="utf-8"))
+    assert report.aggregates["correctness"].mean == 1.0
+    assert report.judge is not None
+    assert report.judge.model == "fake-model"
