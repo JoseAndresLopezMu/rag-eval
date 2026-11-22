@@ -1,5 +1,9 @@
+from typing import Any
+
 import pytest
 
+from rag_eval.judge.base import Prompt
+from rag_eval.judge.fake import FakeJudge
 from rag_eval.models import Context, DatasetItem, EvalConfig, Evidence, Report, RunItem
 from rag_eval.report import (
     ReportError,
@@ -138,3 +142,64 @@ def test_render_comparison_markdown() -> None:
     assert "| Metric | semantic | hybrid | Difference | Verdict |" in md
     assert "| hit@2 | 0.00 [0.00, 0.00] (n=2) | 1.00 [1.00, 1.00] (n=2) " in md
     assert "+1.00 [+1.00, +1.00] (n=2) | better |" in md
+
+
+def fake_judge(model: str = "fake") -> FakeJudge:
+    def faithful(p: Prompt) -> dict[str, Any]:
+        if "No tengo" in p.user:
+            return {"claims": []}
+        return {"claims": [{"claim": "x", "supported": True}, {"claim": "y", "supported": False}]}
+
+    return FakeJudge(
+        {
+            "faithfulness": faithful,
+            "correctness": lambda p: {"correct": True, "rationale": "matches"},
+            "abstention": lambda p: {"abstained": "No tengo" in p.user, "rationale": "r"},
+        },
+        model=model,
+    )
+
+
+def judged_report(judge: FakeJudge) -> Report:
+    run = (*GOOD_RUN[:2], RunItem(id="q3", answer="No tengo esa información."))
+    return build_report(
+        DATASET, run, CONFIG, dataset_sha256="d" * 64, run_sha256="r" * 64, judge=judge
+    )
+
+
+class TestReportWithJudge:
+    def test_generation_scores_per_question(self) -> None:
+        q1, _, q3 = judged_report(fake_judge()).questions
+        assert q1.scores["faithfulness"] == 0.5
+        assert q1.scores["correctness"] == 1.0
+        assert "abstention" not in q1.scores
+        assert q3.scores == {"abstention": 1.0}
+
+    def test_answer_without_claims_has_no_faithfulness_score(self) -> None:
+        q3 = judged_report(fake_judge()).questions[2]
+        assert "faithfulness" not in q3.scores
+        assert q3.judgements["faithfulness"] == {"claims": []}
+
+    def test_judgements_are_kept_for_auditing(self) -> None:
+        q1 = judged_report(fake_judge()).questions[0]
+        assert q1.judgements["correctness"] == {"correct": True, "rationale": "matches"}
+
+    def test_aggregates_and_judge_info(self) -> None:
+        r = judged_report(fake_judge())
+        assert r.aggregates["faithfulness"].n == 2
+        assert r.aggregates["abstention"].n == 1
+        assert r.judge is not None
+        assert r.judge.model == "fake"
+
+    def test_report_without_judge_has_no_generation_metrics(self) -> None:
+        r = report(GOOD_RUN)
+        assert r.judge is None
+        assert "faithfulness" not in r.aggregates
+
+    def test_reports_from_different_judges_are_not_comparable(self) -> None:
+        with pytest.raises(ReportError, match=r"different judges: a .* vs b"):
+            compare_reports(judged_report(fake_judge("a")), judged_report(fake_judge("b")))
+
+    def test_judged_report_survives_json_round_trip(self) -> None:
+        r = judged_report(fake_judge())
+        assert Report.model_validate_json(r.model_dump_json()) == r

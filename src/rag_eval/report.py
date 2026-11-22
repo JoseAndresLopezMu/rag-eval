@@ -2,12 +2,19 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import partial
+from typing import Any
+
+from pydantic import JsonValue
 
 from rag_eval import __version__
+from rag_eval.judge.base import Judge
+from rag_eval.judge.prompts import PROMPT_VERSION
+from rag_eval.metrics import generation
 from rag_eval.metrics.retrieval import retrieval_scores
 from rag_eval.models import (
     DatasetItem,
     EvalConfig,
+    JudgeInfo,
     MetricEstimate,
     QuestionResult,
     Report,
@@ -28,24 +35,24 @@ def build_report(
     dataset_sha256: str,
     run_sha256: str,
     git_commit: str | None = None,
+    judge: Judge | None = None,
 ) -> Report:
     runs_by_id = {r.id: r for r in run}
     _check_same_ids([d.id for d in dataset], list(runs_by_id))
 
-    covers_at = partial(covers, threshold=config.threshold)
     questions = []
     for item in dataset:
-        scores: dict[str, float] = {}
-        if item.answerable:
-            r = retrieval_scores(item.evidence, runs_by_id[item.id].contexts, config.k, covers_at)
-            k = config.k
-            scores = {
-                f"hit@{k}": r.hit,
-                f"recall@{k}": r.recall,
-                f"precision@{k}": r.precision,
-                f"mrr@{k}": r.mrr,
-            }
-        questions.append(QuestionResult(id=item.id, answerable=item.answerable, scores=scores))
+        answer = runs_by_id[item.id]
+        scores = _retrieval(item, answer, config)
+        judgements: dict[str, JsonValue] = {}
+        if judge is not None:
+            gen_scores, judgements = _generation(item, answer, judge)
+            scores |= gen_scores
+        questions.append(
+            QuestionResult(
+                id=item.id, answerable=item.answerable, scores=scores, judgements=judgements
+            )
+        )
 
     return Report(
         rag_eval_version=__version__,
@@ -53,14 +60,54 @@ def build_report(
         dataset_sha256=dataset_sha256,
         run_sha256=run_sha256,
         config=config,
+        judge=JudgeInfo(model=judge.model, prompt_version=PROMPT_VERSION) if judge else None,
         aggregates=_aggregate(questions, config),
         questions=tuple(questions),
     )
 
 
+def _retrieval(item: DatasetItem, answer: RunItem, config: EvalConfig) -> dict[str, float]:
+    if not item.answerable:
+        return {}
+    covers_at = partial(covers, threshold=config.threshold)
+    r = retrieval_scores(item.evidence, answer.contexts, config.k, covers_at)
+    k = config.k
+    return {
+        f"hit@{k}": r.hit,
+        f"recall@{k}": r.recall,
+        f"precision@{k}": r.precision,
+        f"mrr@{k}": r.mrr,
+    }
+
+
+def _generation(
+    item: DatasetItem, answer: RunItem, judge: Judge
+) -> tuple[dict[str, float], dict[str, JsonValue]]:
+    # Faithfulness is judged against every returned context, not only the top k:
+    # the generator saw all of them.
+    results: dict[str, generation.Scored[Any]] = {
+        "faithfulness": generation.faithfulness(
+            judge, answer.answer, [c.text for c in answer.contexts]
+        )
+    }
+    if item.answerable:
+        results["correctness"] = generation.correctness(
+            judge, item.question, answer.answer, item.reference_answer
+        )
+    else:
+        results["abstention"] = generation.abstention(judge, item.question, answer.answer)
+
+    scores = {name: r.score for name, r in results.items() if r.score is not None}
+    judgements: dict[str, JsonValue] = {
+        name: r.judgement.model_dump(mode="json") for name, r in results.items()
+    }
+    return scores, judgements
+
+
 def _check_same_ids(dataset_ids: list[str], run_ids: list[str]) -> None:
-    missing = [i for i in dataset_ids if i not in set(run_ids)]
-    extra = [i for i in run_ids if i not in set(dataset_ids)]
+    dataset_set, run_set = set(dataset_ids), set(run_ids)
+    missing = [i for i in dataset_ids if i not in run_set]
+    extra = [i for i in run_ids if i not in dataset_set]
     problems = []
     if missing:
         problems.append(f"missing from run: {_preview(missing)}")
@@ -144,6 +191,11 @@ def compare_reports(baseline: Report, candidate: Report) -> list[MetricCompariso
 def _check_comparable(a: Report, b: Report) -> None:
     if a.dataset_sha256 != b.dataset_sha256:
         raise ReportError("reports were built from different datasets")
+    if a.judge and b.judge and a.judge != b.judge:
+        raise ReportError(
+            f"reports use different judges: {a.judge.model} (prompt v{a.judge.prompt_version}) "
+            f"vs {b.judge.model} (prompt v{b.judge.prompt_version})"
+        )
     for field in ("k", "threshold", "confidence", "resamples", "seed"):
         va, vb = getattr(a.config, field), getattr(b.config, field)
         if va != vb:

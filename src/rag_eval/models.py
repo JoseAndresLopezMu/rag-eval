@@ -1,6 +1,6 @@
 from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, model_validator
 
 NonEmptyStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -66,6 +66,13 @@ class MetricEstimate(_Model):
 class QuestionResult(Record):
     answerable: bool
     scores: dict[str, float]
+    # Raw judge output per metric (claims, rationales) so every score can be audited.
+    judgements: dict[str, JsonValue] = {}
+
+
+class JudgeInfo(_Model):
+    model: str
+    prompt_version: str
 
 
 class EvalConfig(_Model):
@@ -82,5 +89,6 @@ class Report(_Model):
     dataset_sha256: str
     run_sha256: str
     config: EvalConfig
+    judge: JudgeInfo | None = None
     aggregates: dict[str, MetricEstimate]
     questions: tuple[QuestionResult, ...]
