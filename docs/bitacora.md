@@ -49,3 +49,20 @@ Lo más relevante fue el cambio de criterio en el adaptador. En el borrador, el 
 **Decisión:** elegí el tramo seguido con umbral del 60 %. La cita exacta se descartó porque fallaría con citas cortadas por el borde de un fragmento. Queda como norma escribir citas de al menos 8 palabras. `precision@k` se divide por los contextos devueltos, no por k.
 
 **Aprendizaje:** una regla que parecía razonable en papel era claramente mala con datos reales. Probar la especificación contra el documento real antes de escribir el código evitó una métrica inflada.
+
+## Paso 4 - Informe, intervalos de confianza y comparación (2026-11-21)
+
+**Agente:**
+- Implementó el bootstrap (intervalo del 95 % con 2000 remuestreos y semilla fija) y el bootstrap pareado para comparar ejecuciones, sin numpy. Un test demuestra por qué hace falta el emparejamiento: con preguntas de dificultad muy variable, los intervalos por separado se solapan, pero el pareado detecta una mejora constante de 0,1.
+- Creó el informe JSON (puntuaciones por pregunta, medias con intervalo, configuración, hash del dataset y de la ejecución, versión y commit) y los comandos `evaluate` y `compare`. La comparación se niega a comparar informes de datasets o configuraciones distintas.
+- Las puntuaciones por pregunta se guardan como un diccionario de métricas, para que las de generación del paso 5 entren sin cambiar el formato.
+- Tres tests fallaron por errores del agente al escribirlos, no del código:
+  - supuso que dos semillas distintas siempre dan intervalos distintos, lo que no es cierto con 5 valores;
+  - usó `pytest.approx` con un dataclass;
+  - olvidó que el umbral del 60 % es inclusivo (3 de 5 palabras = 0,6).
+  En los tres casos comprobó el comportamiento real antes de corregir el test.
+- Probó la herramienta de punta a punta con 8 citas literales del pliego y dos ejecuciones sintéticas que no se publican en el repo. El informe dio un acierto más de los que había colocado el generador. Al investigarlo vio que un fragmento de relleno empezaba a mitad de la cita (7 de 10 palabras): era un acierto legítimo según la regla, y el error estaba en la suposición del generador.
+
+**Revisión:** vi el informe y la tabla de comparación del ejemplo, y pedí continuar sin cambios.
+
+**Decisión:** acepté el diseño tal como estaba, incluido marcar como `inconclusive` cualquier diferencia cuyo intervalo incluya el 0. En el ejemplo, con 8 preguntas, solo la mejora del MRR resultó concluyente: un dataset pequeño no permite afirmar mejoras pequeñas.
