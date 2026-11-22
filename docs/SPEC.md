@@ -120,6 +120,11 @@ Por pregunta, con `k` configurable (5 por defecto):
 
 El juez debe devolver JSON validado con Pydantic e incluir una justificación breve, que se guarda en el informe para poder auditar cada nota.
 
+Casos concretados en el paso 5:
+- `faithfulness` se mide contra **todos** los contextos devueltos, no solo los k primeros, porque el generador los vio todos.
+- Una respuesta sin afirmaciones factuales (por ejemplo, "No tengo esa información") no recibe nota de `faithfulness`: la métrica no aplica, y contarla como 1 inflaría la media. Su juicio se guarda igualmente.
+- `faithfulness` también se calcula en preguntas sin respuesta: si el sistema se inventa algo, debe penalizarse.
+
 ### 5.3 Agregados e intervalos
 
 - Media de cada métrica sobre todas las preguntas aplicables.
@@ -134,6 +139,9 @@ Con unas 30 preguntas, muchas diferencias pequeñas no serán concluyentes. Pref
 - Temperatura 0 y modelo fijado en la configuración.
 - Los prompts están versionados (`PROMPT_VERSION`) y su versión se guarda en el informe.
 - Caché en disco con clave `hash(modelo, versión del prompt, entradas)`, para no pagar dos veces por lo mismo y poder reproducir un informe.
+- Modo JSON de la API. Si la respuesta no cumple el esquema, el modelo tiene un único reintento con el error de validación delante. Los errores 429 y 5xx se reintentan con espera exponencial, respetando `retry-after`.
+- El juez es opcional (`rag-eval evaluate --judge`), para que las métricas de recuperación funcionen sin clave de API. El modelo es configurable (`--judge-model`), y dos informes con jueces distintos no se pueden comparar.
+- **Riesgo de autopreferencia:** si el juez es el mismo modelo que generó las respuestas (chatbot-rag usa `llama-3.3-70b-versatile`), puede favorecerlas. La calibración del paso 7 permite medirlo.
 
 ### 6.1 Calibración del juez
 
