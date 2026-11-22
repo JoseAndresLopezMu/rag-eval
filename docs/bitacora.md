@@ -66,3 +66,25 @@ Lo más relevante fue el cambio de criterio en el adaptador. En el borrador, el 
 **Revisión:** vi el informe y la tabla de comparación del ejemplo, y pedí continuar sin cambios.
 
 **Decisión:** acepté el diseño tal como estaba, incluido marcar como `inconclusive` cualquier diferencia cuyo intervalo incluya el 0. En el ejemplo, con 8 preguntas, solo la mejora del MRR resultó concluyente: un dataset pequeño no permite afirmar mejoras pequeñas.
+
+## Paso 5 - Juez LLM y métricas de generación (2026-11-22)
+
+**Agente:**
+- Separó el juez en capas: prompts versionados, un protocolo `Judge` con `ask(prompt, esquema)`, un `FakeJudge` para tests, un `CachedJudge` en disco y un `GroqJudge` sobre HTTP. Las métricas no saben qué juez usan, así que se prueban sin red.
+- `GroqJudge` usa temperatura 0 y modo JSON. Si la respuesta no cumple el esquema, el modelo tiene un único reintento con el error delante. Los errores 429 y 5xx se reintentan con espera exponencial, respetando `retry-after`. Los 4xx no se reintentan. Todo se prueba con `httpx.MockTransport`.
+- Concretó en la SPEC tres casos que no estaban definidos: la fidelidad se mide contra todos los contextos devueltos, una respuesta sin afirmaciones no recibe nota de fidelidad (contarla como 1 inflaría la media) y la fidelidad también se calcula en preguntas sin respuesta.
+- Antes de fijar el modelo por defecto revisó chatbot-rag: genera con `llama-3.3-70b-versatile`. Usar el mismo modelo como juez tiene riesgo de autopreferencia. Lo dejó documentado en la SPEC como decisión pendiente.
+- Errores propios detectados por ruff y mypy: un patrón de test sin escapar y un import que mypy no aceptaba. Al preparar la prueba manual, un heredoc anidado mal escrito no llegó a crear los ficheros, y el primer extracto del pliego se cortaba antes de la frase que la prueba necesitaba.
+- El juez real con Groq no se podía probar sin una clave. El agente intentó buscar una en el entorno, pero el sistema de permisos lo bloqueó (correctamente) y pidió la clave al autor.
+
+**Prueba real:** con una clave temporal, el agente listó los modelos de Groq y descubrió que `llama-3.3-70b-versatile` ya no existe. Era el modelo por defecto del juez y el que usa chatbot-rag si no se configura otro. Sin la prueba real, el juez habría fallado en la primera ejecución.
+
+Prueba de humo con `openai/gpt-oss-120b` y 3 preguntas con texto literal del pliego:
+- Respuesta fiel: 5 de 5 afirmaciones respaldadas, y correcta.
+- Pregunta sin respuesta: abstención detectada. Al no tener afirmaciones, no recibe nota de fidelidad.
+- Respuesta con una afirmación inventada a propósito ("copias de seguridad diarias con retención de 90 días"): el juez la marca como no respaldada, con fidelidad 0,5. La respuesta sí sale correcta, porque contesta bien a la pregunta. Esto muestra por qué hacen falta las dos métricas.
+- Al repetir la ejecución: 0 llamadas a la API, 6 desde caché y un informe idéntico.
+
+**Revisión:** no encontraba la clave de Groq. El agente explicó cómo crear una nueva y la generé con caducidad de 7 días para esta prueba.
+
+**Decisión:** el modelo del juez pasa a ser `openai/gpt-oss-120b`. Lo eligió el agente porque es el más capaz de los disponibles y no coincide con el generador. Queda pendiente para el paso 6: chatbot-rag tiene que cambiar de modelo, y conviene que no use el mismo que el juez.
