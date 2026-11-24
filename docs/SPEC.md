@@ -168,6 +168,35 @@ Un juez LLM también se equivoca. Para saber cuánto:
 
 Para comparar búsqueda semántica frente a híbrida, chatbot-rag necesitará un parámetro que elija el modo de recuperación. Ese cambio queda fuera de este repositorio y se decidirá cuando llegue.
 
+### 7.1 Contrato con chatbot-rag (paso 6)
+
+Petición del adaptador a `POST {url}/chat`:
+
+```json
+{"input": "¿Incluye el servicio la recuperación de datos?", "include_contexts": true}
+```
+
+Respuesta esperada. `answer` y `sources` ya existen; `contexts` es lo nuevo y solo aparece si se pide:
+
+```json
+{
+  "answer": "...",
+  "sources": [{"fileName": "...", "pageNumber": 7}],
+  "contexts": [{"content": "texto del fragmento", "fileName": "...", "pageNumber": 7}]
+}
+```
+
+`contexts` son los fragmentos, en el orden en que se pasaron al LLM. El adaptador falla si la respuesta no trae `contexts`, en vez de suponer que está vacío: así una versión de chatbot-rag sin el cambio no produce una evaluación de fidelidad sin sentido.
+
+### 7.2 Estado de chatbot-rag en producción (2026-11-24)
+
+Al preparar el adaptador se comprobó la API desplegada (`https://chatbot-rag-src.vercel.app/api`). Las dos rutas fallan:
+
+- `/api/search`: `tenant/user postgres.… not found`. El proyecto de Supabase ya no está disponible.
+- `/api/chat`: `expired_api_key`. La clave de Groq configurada en Vercel ha caducado. Además, el modelo por defecto (`llama-3.3-70b-versatile`) ya no existe en Groq.
+
+Para evaluar hace falta: restaurar o recrear la base de datos (esquema `db/schema.sql` y `npm run seed`), configurar en Vercel una clave de Groq válida y un modelo disponible, y desplegar el cambio de 7.1. Como generador se propone `qwen/qwen3.8-27b`: responde sin texto de razonamiento mezclado y es de otra familia que el juez (`openai/gpt-oss-120b`).
+
 ## 8. CLI
 
 ```
@@ -175,6 +204,7 @@ rag-eval collect --target chatbot-rag --dataset data/dataset.jsonl --out runs/hy
 rag-eval evaluate --dataset data/dataset.jsonl --run runs/hybrid.jsonl --out reports/hybrid.json
 rag-eval compare reports/semantic.json reports/hybrid.json --out reports/comparison.md
 rag-eval calibrate --labels data/labels.jsonl
+rag-eval check-quotes --dataset data/dataset.jsonl --sources-dir documents/
 ```
 
 El informe JSON incluye: métricas por pregunta, agregados con intervalos, configuración (k, umbral, modelo del juez, versión del prompt), hash del dataset y commit de git.
@@ -208,7 +238,7 @@ Cada paso termina con tests en verde, se revisa antes de subirse y se anota en `
 
 - **Dataset pequeño:** 30 preguntas dan intervalos anchos. Se asume y se muestra.
 - **Sesgo del juez:** mitigado con la calibración (6.1) y guardando sus justificaciones.
-- **Citas mal copiadas:** si `quote` no coincide con el texto extraído del PDF, la métrica de recuperación da 0 sin culpa del sistema. Habrá un comando o test que compruebe que cada cita aparece en el documento fuente.
+- **Citas mal copiadas:** si `quote` no coincide con el texto extraído del PDF, la métrica de recuperación da 0 sin culpa del sistema. `rag-eval check-quotes` comprueba que cada cita aparece literalmente en su documento fuente (PDF mediante su texto extraído con `pdftotext`; DOCX, TXT y MD directamente) y que tiene al menos 8 palabras.
 - **Coste de API:** la caché evita repetir llamadas, y 30 preguntas con Groq tienen un coste muy bajo.
 
 ## 12. Decisiones tomadas en la revisión
