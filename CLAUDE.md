@@ -16,6 +16,7 @@ src/rag_eval/
     retrieval.py   # hit@k, recall@k, precision@k, mrr
     generation.py  # faithfulness, correctness, abstention (usan un Judge)
   stats.py         # Agregados y bootstrap (simple y pareado)
+  quotes.py        # Comprueba que las citas del dataset son literales
   judge/
     base.py        # Protocolo Judge y modelos de salida
     groq.py        # GroqJudge (httpx contra la API compatible con OpenAI)
@@ -24,14 +25,15 @@ src/rag_eval/
     prompts.py     # Prompts versionados (PROMPT_VERSION)
   adapters/
     jsonl.py       # Lee dataset y ejecuciones desde JSONL, con errores por línea
-    chatbot_rag.py # Llama a la API de chatbot-rag
+    chatbot_rag.py # Llama a la API de chatbot-rag (contrato en SPEC 7.1)
+    sources.py     # Lee el texto de los documentos fuente (TXT, MD, DOCX)
   report.py        # Construye el informe JSON y el Markdown de comparación
   cli.py           # Typer: collect, evaluate, compare, calibrate
 tests/
 data/              # Dataset y etiquetas manuales
 ```
 
-Flujo: `collect` (adaptador → run.jsonl), `evaluate` (dataset + run → informe), `compare` (dos informes → Markdown).
+Flujo: `check-quotes` (validar el dataset), `collect` (adaptador → run.jsonl), `evaluate` (dataset + run → informe), `compare` (dos informes → Markdown).
 
 Las métricas son funciones puras: reciben modelos y devuelven números. Toda la E/S (ficheros, red) vive en `adapters/`, `judge/groq.py` y `cli.py`.
 
@@ -46,6 +48,8 @@ uv run mypy src tests         # tipos (modo estricto)
 uv run rag-eval --help        # CLI
 uv run rag-eval evaluate --dataset d.jsonl --run r.jsonl --out report.json [--judge]
 uv run rag-eval compare a.json b.json
+uv run rag-eval collect --dataset d.jsonl --url https://host/api --out r.jsonl
+uv run rag-eval check-quotes --dataset d.jsonl --sources-dir documentos/
 ```
 
 `--judge` llama a Groq (necesita `GROQ_API_KEY`) y guarda las respuestas en `.rag_eval_cache/`. Los tests nunca lo usan.
