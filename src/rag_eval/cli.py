@@ -7,11 +7,14 @@ from typing import Annotated, NoReturn
 import typer
 
 from rag_eval import __version__
+from rag_eval.adapters.chatbot_rag import AdapterError, ChatbotRagClient
 from rag_eval.adapters.jsonl import DataFileError, read_dataset, read_run
+from rag_eval.adapters.sources import SourceError, load_sources
 from rag_eval.judge.base import JudgeError
 from rag_eval.judge.cache import CachedJudge
 from rag_eval.judge.groq import DEFAULT_MODEL, GroqJudge
-from rag_eval.models import EvalConfig, Report
+from rag_eval.models import EvalConfig, Report, RunItem
+from rag_eval.quotes import check_quotes
 from rag_eval.report import ReportError, build_report, compare_reports, render_comparison
 
 app = typer.Typer(no_args_is_help=True, help="Evaluate RAG systems against a reference dataset.")
@@ -104,6 +107,67 @@ def compare(
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(markdown, encoding="utf-8")
         typer.echo(f"Comparison written to {out}")
+
+
+@app.command()
+def collect(
+    dataset: Annotated[Path, typer.Option(exists=True, dir_okay=False, help="Dataset JSONL.")],
+    url: Annotated[str, typer.Option(help="chatbot-rag API base, e.g. https://host/api")],
+    out: Annotated[Path, typer.Option(help="Where to write the run JSONL.")],
+) -> None:
+    """Ask chatbot-rag every dataset question and save its answers and contexts."""
+    try:
+        items = read_dataset(dataset)
+    except DataFileError as e:
+        _fail(str(e))
+
+    client = ChatbotRagClient(url)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    total = len(items)
+
+    def progress(run_item: RunItem) -> None:
+        latency = f"{run_item.latency_ms:.0f} ms" if run_item.latency_ms is not None else "-"
+        typer.echo(f"{run_item.id}: {len(run_item.contexts)} contexts, {latency}")
+
+    try:
+        runs = client.collect(items, on_progress=progress)
+    except AdapterError as e:
+        _fail(str(e))
+
+    out.write_text(
+        "".join(r.model_dump_json() + "\n" for r in runs),
+        encoding="utf-8",
+    )
+    typer.echo(f"{total} answers written to {out}")
+
+
+@app.command("check-quotes")
+def check_quotes_command(
+    dataset: Annotated[Path, typer.Option(exists=True, dir_okay=False, help="Dataset JSONL.")],
+    sources_dir: Annotated[
+        Path,
+        typer.Option(
+            exists=True,
+            file_okay=False,
+            help="Folder with the source documents. PDFs need a NAME.pdf.txt beside them "
+            "(pdftotext NAME.pdf NAME.pdf.txt); DOCX, TXT and MD are read directly.",
+        ),
+    ],
+) -> None:
+    """Check that every evidence quote is verbatim in its source and long enough."""
+    try:
+        items = read_dataset(dataset)
+        names = {ev.source for item in items for ev in item.evidence}
+        problems = check_quotes(items, load_sources(sources_dir, names))
+    except (DataFileError, SourceError) as e:
+        _fail(str(e))
+
+    for p in problems:
+        typer.echo(f"{p.item_id}: {p.issue} ({p.detail}) [{p.source}] {p.quote!r}")
+    quotes = sum(len(item.evidence) for item in items)
+    if problems:
+        _fail(f"{len(problems)} problems in {quotes} quotes")
+    typer.echo(f"All {quotes} quotes are verbatim and have at least 8 words")
 
 
 def _fail(message: str) -> NoReturn:

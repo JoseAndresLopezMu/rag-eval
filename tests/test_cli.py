@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -7,7 +8,7 @@ from typer.testing import CliRunner
 from rag_eval import __version__
 from rag_eval.cli import app
 from rag_eval.judge.fake import FakeJudge
-from rag_eval.models import Report
+from rag_eval.models import Report, RunItem
 
 runner = CliRunner()
 
@@ -171,3 +172,64 @@ def test_judge_scores_are_added_and_cached(tmp_path: Path, monkeypatch: pytest.M
     assert report.aggregates["correctness"].mean == 1.0
     assert report.judge is not None
     assert report.judge.model == "fake-model"
+
+
+def test_check_quotes_passes_and_fails(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "pliego.pdf.txt").write_text(
+        "• Servicio de recuperación de datos.\n• Soporte in situ a usuarios.", encoding="utf-8"
+    )
+    good: list[dict[str, object]] = [
+        {
+            "id": "q1",
+            "question": "?",
+            "reference_answer": "r",
+            "evidence": [
+                {
+                    "source": "pliego.pdf",
+                    "quote": "Servicio de recuperación de datos. Soporte in situ a usuarios",
+                }
+            ],
+        }
+    ]
+    dataset = write_jsonl(tmp_path / "good.jsonl", good)
+    args = ["check-quotes", "--dataset", str(dataset), "--sources-dir", str(tmp_path / "docs")]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    assert "All 1 quotes are verbatim" in result.output
+
+    write_jsonl(tmp_path / "good.jsonl", DATASET)
+    result = runner.invoke(app, args)
+    assert result.exit_code == 1
+    assert "q1: too short (5 words, minimum 8)" in result.output
+
+
+def test_collect_writes_run_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class StubClient:
+        def __init__(self, url: str) -> None:
+            assert url == "https://bot.example/api"
+
+        def collect(self, items: object, on_progress: Any) -> list[RunItem]:
+            runs = [RunItem(id="q1", answer="a"), RunItem(id="q2", answer="b", latency_ms=5)]
+            for r in runs:
+                on_progress(r)
+            return runs
+
+    monkeypatch.setattr("rag_eval.cli.ChatbotRagClient", StubClient)
+    dataset = write_jsonl(tmp_path / "dataset.jsonl", DATASET)
+    out = tmp_path / "runs" / "hybrid.jsonl"
+    result = runner.invoke(
+        app,
+        [
+            "collect",
+            "--dataset",
+            str(dataset),
+            "--url",
+            "https://bot.example/api",
+            "--out",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "q2: 0 contexts, 5 ms" in result.output
+    assert [json.loads(line)["id"] for line in out.read_text().splitlines()] == ["q1", "q2"]
