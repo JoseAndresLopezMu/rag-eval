@@ -88,3 +88,23 @@ Prueba de humo con `openai/gpt-oss-120b` y 3 preguntas con texto literal del pli
 **Revisión:** no encontraba la clave de Groq. El agente explicó cómo crear una nueva y la generé con caducidad de 7 días para esta prueba.
 
 **Decisión:** el modelo del juez pasa a ser `openai/gpt-oss-120b`. Lo eligió el agente porque es el más capaz de los disponibles y no coincide con el generador. Queda pendiente para el paso 6: chatbot-rag tiene que cambiar de modelo, y conviene que no use el mismo que el juez.
+
+## Paso 6a - Adaptador de chatbot-rag y validación de citas (2026-11-24)
+
+**Agente:**
+- Antes de escribir el adaptador comprobó la API desplegada de chatbot-rag. Está caída por dos motivos: la base de datos de Supabase ya no existe (`tenant/user ... not found`) y la clave de Groq de Vercel ha caducado. Además, el modelo que usa por defecto ya no existe. Quedó documentado en la SPEC (7.2).
+- Intentó levantar chatbot-rag en local para no depender de producción, pero no hay Node.js ni Docker en el equipo.
+- Probó modelos de Groq para sustituir al generador retirado. Propone `qwen/qwen3.8-27b`: responde sin texto de razonamiento mezclado y es de otra familia que el juez.
+- Fijó en la SPEC (7.1) el contrato exacto con chatbot-rag e implementó el adaptador y el comando `collect`. Si la respuesta no trae `contexts`, falla con un mensaje que apunta al despliegue, en vez de evaluar con contextos vacíos.
+- Implementó `check-quotes`, que estaba previsto en los riesgos de la SPEC. Comprueba que cada cita es literal en su documento y tiene al menos 8 palabras. Lee DOCX con la librería estándar (sin dependencias nuevas) y PDF a través de su texto extraído. Se probó con el pliego y las tres ofertas reales.
+- Errores propios:
+  - Cuarto fallo de un test por contar palabras a mano (12 y no 11). Desde ahora el cálculo esperado se escribe en el test.
+  - Ruff detectó una función definida dentro de un bucle que capturaba sus variables.
+  - El extracto del pliego de un test saltaba una frase sin indicarlo. Se corrigió por la regla de extractos literales del `CLAUDE.md`.
+  - Dos ediciones de la SPEC fallaron sin que lo notara, y el commit salió con un mensaje que no correspondía a su contenido. Se rehízo antes de subirlo.
+
+**Revisión:**
+<!-- Pendiente -->
+
+**Decisión:**
+<!-- Pendiente: cómo restaurar chatbot-rag (Supabase y Vercel) y quién escribe el borrador de las ~30 preguntas -->
