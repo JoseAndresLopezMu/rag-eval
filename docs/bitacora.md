@@ -122,3 +122,4 @@ Prueba de humo con `openai/gpt-oss-120b` y 3 preguntas con texto literal del pli
 - Reanudé Supabase.
 - En Vercel, puse una clave de Groq nueva y `GROQ_MODEL`, y conecté el proyecto con GitHub.
 - En GitHub, limité la app de Vercel a acceder solo a `chatbot-rag`, en lugar de a todos mis repositorios.
+- Al ejecutar yo la evaluación con juez, pegué por error el texto de ejemplo del comando (`gsk_aquí_tu_clave_completa`) como clave. rag-eval se rompía con un traceback de `httpx` (`UnicodeEncodeError` por la "í") en vez de dar un mensaje claro. Se añadió primero el test que lo reproduce y luego el arreglo: la clave se valida al crear el juez, los espacios de alrededor del copiado se ignoran y el mensaje de error nunca muestra la clave. **Aprendizaje:** las instrucciones con huecos para rellenar invitan a este error, así que es mejor pedir la clave de forma interactiva (`read -s`).
