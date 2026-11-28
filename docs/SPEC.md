@@ -197,6 +197,12 @@ Al preparar el adaptador se comprobó la API desplegada (`https://chatbot-rag-sr
 
 Para evaluar hace falta: restaurar o recrear la base de datos (esquema `db/schema.sql` y `npm run seed`), configurar en Vercel una clave de Groq válida y un modelo disponible, y desplegar el cambio de 7.1. Como generador se propone `qwen/qwen3.8-27b`: responde sin texto de razonamiento mezclado y es de otra familia que el juez (`openai/gpt-oss-120b`).
 
+**Restaurado (2026-11-28).** El proyecto de Supabase estaba pausado, no borrado: se reanudó sin pérdida de datos. En Vercel se configuraron una clave de Groq nueva y `GROQ_MODEL=qwen/qwen3.8-27b`. El proyecto de Vercel, que se había desplegado con la CLI, se conectó al repositorio de GitHub (con acceso de la app de Vercel limitado a ese repositorio), y el cambio de 7.1 se desplegó automáticamente desde `main`. Sin `include_contexts`, la respuesta de `/api/chat` no cambia.
+
+Observaciones al restaurarlo:
+- chatbot-rag asigna página 1 a todos los fragmentos, también a los del PDF. No afecta a la evaluación, porque la relevancia depende del documento y la cita (4.3), no de la página.
+- Los DOCX se convierten a Markdown antes de trocearlos (`# 2. Cumplimiento…`, `**Expediente…**`). La normalización de 4.3 elimina esos símbolos, así que las citas copiadas del texto del DOCX siguen coincidiendo.
+
 ## 8. CLI
 
 ```
