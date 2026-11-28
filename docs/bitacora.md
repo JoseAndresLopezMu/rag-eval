@@ -108,3 +108,17 @@ Prueba de humo con `openai/gpt-oss-120b` y 3 preguntas con texto literal del pli
 
 **Decisión:**
 <!-- Pendiente: cómo restaurar chatbot-rag (Supabase y Vercel) y quién escribe el borrador de las ~30 preguntas -->
+
+## Paso 6b - chatbot-rag de vuelta en producción (2026-11-28)
+
+**Agente:**
+- Guió la restauración paso a paso. Antes de conectar Vercel con GitHub comprobó que GitHub tenía el mismo código que producción: la ruta `/api/process-document`, que el último commit había renombrado, ya existía desplegada, y la antigua `/api/ingest` daba 404. Así, conectar no sustituiría producción por otra versión.
+- Implementó `include_contexts` en chatbot-rag y cambió el modelo por defecto. Sin Node.js en el equipo no podía validar el JavaScript antes de un push que despliega directamente en producción, así que descargó el binario oficial de Node (con la suma SHA-256 verificada) en una carpeta temporal, solo para `node --check`.
+- El primer push no se desplegó: el proyecto de Vercel no estaba conectado a GitHub, aunque lo parecía. Lo detectó porque producción seguía sin `contexts` y GitHub no mostraba ningún estado de Vercel para el commit.
+- Prueba de punta a punta con 3 preguntas contra la API real (`collect` y `evaluate`): q01 recupera la evidencia, pero en la posición 5 de 5; q03 no la recupera y el modelo se abstiene; la pregunta sin respuesta se abstiene correctamente. Indica que los fallos están en la recuperación, no en la generación, pero con 3 preguntas no se puede concluir nada.
+- El juez no se pudo ejecutar porque la clave temporal ya no era válida (`invalid_api_key`).
+
+**Revisión y decisiones:** la restauración la hice yo en los paneles, porque el agente no tiene acceso a mis cuentas:
+- Reanudé Supabase.
+- En Vercel, puse una clave de Groq nueva y `GROQ_MODEL`, y conecté el proyecto con GitHub.
+- En GitHub, limité la app de Vercel a acceder solo a `chatbot-rag`, en lugar de a todos mis repositorios.
