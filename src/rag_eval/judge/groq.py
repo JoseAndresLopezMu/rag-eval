@@ -29,8 +29,15 @@ class GroqJudge:
         max_retries: int = 4,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
+        api_key = api_key.strip()
         if not api_key:
             raise JudgeError("GROQ_API_KEY is empty")
+        if not api_key.isascii() or any(c.isspace() or not c.isprintable() for c in api_key):
+            # Never echo the key: it may be real and only slightly mangled.
+            raise JudgeError(
+                "GROQ_API_KEY contains spaces or non-ASCII characters; "
+                "check that the whole key was pasted and nothing else"
+            )
         self._model = model
         self._client = client or httpx.Client(timeout=60)
         self._headers = {"Authorization": f"Bearer {api_key}"}

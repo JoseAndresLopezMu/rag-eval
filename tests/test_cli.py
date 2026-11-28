@@ -149,6 +149,16 @@ def test_judge_requires_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "GROQ_API_KEY" in result.output
 
 
+def test_malformed_api_key_gives_a_clean_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_aquí_tu_clave_completa")
+    result = runner.invoke(app, judge_args(tmp_path))
+    assert result.exit_code == 1
+    assert "error: GROQ_API_KEY contains spaces or non-ASCII characters" in result.output
+    assert "Traceback" not in result.output
+
+
 def test_judge_scores_are_added_and_cached(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeJudge(
         {

@@ -119,3 +119,24 @@ def test_unexpected_response_shape(make_payload: Callable[[], object]) -> None:
 def test_empty_api_key_is_rejected() -> None:
     with pytest.raises(JudgeError, match="GROQ_API_KEY"):
         GroqJudge("")
+
+
+@pytest.mark.parametrize("key", ["gsk_aquí_tu_clave", "gsk_abc def"])
+def test_malformed_api_key_is_rejected_before_any_request(key: str) -> None:
+    # A placeholder pasted by mistake used to crash inside httpx with a
+    # UnicodeEncodeError traceback instead of a readable message.
+    with pytest.raises(JudgeError, match="GROQ_API_KEY") as exc:
+        GroqJudge(key)
+    assert key not in str(exc.value)
+
+
+def test_surrounding_whitespace_from_copy_paste_is_ignored() -> None:
+    sent: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request.headers["authorization"])
+        return completion(VALID)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    GroqJudge("  gsk_abc\n", client=client).ask(PROMPT, CorrectnessJudgement)
+    assert sent == ["Bearer gsk_abc"]

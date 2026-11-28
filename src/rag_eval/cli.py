@@ -61,7 +61,10 @@ def evaluate(
         api_key = os.environ.get("GROQ_API_KEY", "")
         if not api_key:
             _fail("--judge needs the GROQ_API_KEY environment variable")
-        cached = CachedJudge(GroqJudge(api_key, model=judge_model), cache_dir)
+        try:
+            cached = CachedJudge(GroqJudge(api_key, model=judge_model), cache_dir)
+        except JudgeError as e:
+            _fail(str(e))
 
     try:
         report = build_report(
